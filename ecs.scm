@@ -113,22 +113,30 @@
        (apply values (cons ids (map (lambda(comp) (map (lambda (id) (hashtable-ref (vector-ref (entity-vector world) id) comp #f)) ids)) components)))))
 
   ;for a query or integer, update all components in list components to the values in list values
-  (define (set-component world query components values)
-    (unless (and (list? components) (list? values) (= (length components) (length values))) (assertion-violation 'set-component "components and values must be lists of equal lengths" components values))
+  ;; (define (set-component world query components values)
+  ;;   (unless (and (list? components) (list? values) (= (length components) (length values))) (assertion-violation 'set-component "components and values must be lists of equal lengths" components values))
+  ;;   (let ((ids (if (procedure? query) (set->list (query world)) (list query)))
+  ;; 	  (v (vector-copy (entity-vector world))))
+  ;;     (let loop ((i ids)
+  ;; 		 (comp components)
+  ;; 		 (val values)
+  ;; 		 (ht (hashtable-copy (vector-ref v (car ids)) #t)))
+  ;; 	(cond ((null? i) #f)
+  ;; 	      ((not ht) (loop i comp val (hashtable-copy (vector-ref v (car i)) #t)))
+  ;; 	      ((null? comp) (loop (cdr i) components values #f))
+  ;; 	      (else (hashtable-set! ht (car comp) (car val))
+  ;; 		    (vector-set! v (car i) ht)
+  ;; 		    (loop i (cdr comp) (cdr val) ht))))
+  ;;     (make-world (component-map world) v (free-ids world) (all world))))
+
+  ;;works for single argument, to set several values use let-components abstraction
+  (define (set-component world query component value)
     (let ((ids (if (procedure? query) (set->list (query world)) (list query)))
 	  (v (vector-copy (entity-vector world))))
-      (let loop ((i ids)
-		 (comp components)
-		 (val values)
-		 (ht (hashtable-copy (vector-ref v (car ids)) #t)))
-	(cond ((null? i) #f)
-	      ((not ht) (loop i comp val (hashtable-copy (vector-ref v (car i)) #t)))
-	      ((null? comp) (loop (cdr i) components values #f))
-	      (else (hashtable-set! ht (car comp) (car val))
-		    (vector-set! v (car i) ht)
-		    (loop i (cdr comp) (cdr val) ht))))
+      (for-each (lambda (i) (let ((ht (hashtable-copy (vector-ref v i) #t)))
+			      (hashtable-set! ht component value)
+			      (vector-set! v i ht))) ids)
       (make-world (component-map world) v (free-ids world) (all world))))
-
   ;update the value of component 'component' for all entities matching query 'query' by calling the procedure with the previous value or default if the entity has no component 'component'
   ;query is either a procedure create by the query syntactic form or an integer
   (define (update-component world query component procedure default)
