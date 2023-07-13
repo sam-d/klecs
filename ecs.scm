@@ -11,11 +11,14 @@
 	  query
 	  get-components
 	  update-component
-	  set-component)
+	  set-component
+	  let-components)
   (import (rnrs base)
+	  (rnrs lists)
 	  (rnrs control)
 	  (rnrs hashtables)
 	  (rnrs records syntactic)
+	  (rnrs syntax-case)
 	  (game bitset)
 	  (only (srfi :43) vector-copy))
 
@@ -137,6 +140,18 @@
 		    (hashtable-update! ht component procedure default)
 		    (vector-set! v id ht))) ids)
       (make-world (component-map world) v (free-ids world) (all world))))
-  )
+
+  (define-syntax let-components
+    (lambda (x)
+      (syntax-case x ()
+	[(let-components initial-world query ((var component) ...) e1 e2 ...)
+	 (with-syntax ((id (datum->syntax #'let-components 'id))
+		       (world (datum->syntax #'let-components 'world)))
+		      #`(let-values (((ids var ...) (get-components initial-world query component ...)))
+			  (fold-left (lambda (w id var ...)
+				       (let* ((world w)
+					      #,@(map (lambda (s) #`(world #,s)) #'(e1 e2 ...))) world)) initial-world ids var ...)))])))
+
+)
 
 
