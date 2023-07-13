@@ -1,5 +1,5 @@
 #!r6rs
-(library (game ecs)
+(library (klecs ecs)
   (export <world>
 	  world?
 	  <component>
@@ -19,7 +19,7 @@
 	  (rnrs hashtables)
 	  (rnrs records syntactic)
 	  (rnrs syntax-case)
-	  (game bitset)
+	  (klecs bitset)
 	  (only (srfi :43) vector-copy))
 
   (define-record-type (<world> make-world world?)
@@ -112,23 +112,6 @@
     (let ((ids (if (procedure? query) (set->list (query world)) query)))
        (apply values (cons ids (map (lambda(comp) (map (lambda (id) (hashtable-ref (vector-ref (entity-vector world) id) comp #f)) ids)) components)))))
 
-  ;for a query or integer, update all components in list components to the values in list values
-  ;; (define (set-component world query components values)
-  ;;   (unless (and (list? components) (list? values) (= (length components) (length values))) (assertion-violation 'set-component "components and values must be lists of equal lengths" components values))
-  ;;   (let ((ids (if (procedure? query) (set->list (query world)) (list query)))
-  ;; 	  (v (vector-copy (entity-vector world))))
-  ;;     (let loop ((i ids)
-  ;; 		 (comp components)
-  ;; 		 (val values)
-  ;; 		 (ht (hashtable-copy (vector-ref v (car ids)) #t)))
-  ;; 	(cond ((null? i) #f)
-  ;; 	      ((not ht) (loop i comp val (hashtable-copy (vector-ref v (car i)) #t)))
-  ;; 	      ((null? comp) (loop (cdr i) components values #f))
-  ;; 	      (else (hashtable-set! ht (car comp) (car val))
-  ;; 		    (vector-set! v (car i) ht)
-  ;; 		    (loop i (cdr comp) (cdr val) ht))))
-  ;;     (make-world (component-map world) v (free-ids world) (all world))))
-
   ;;works for single argument, to set several values use let-components abstraction
   (define (set-component world query component value)
     (let ((ids (if (procedure? query) (set->list (query world)) (list query)))
@@ -149,6 +132,9 @@
 		    (vector-set! v id ht))) ids)
       (make-world (component-map world) v (free-ids world) (all world))))
 
+  ;this syntactic form allows to iterate over the components of all entities that match the query. The components get bound to the variables as specified. Additionally, within
+  ;the scope of body the variable world is bound to the last-updated world and the variable id is the entity id that is currently iterated over
+  ;it is mandatory, that all expressions e1 e2 ... within the body return a world? instance
   (define-syntax let-components
     (lambda (x)
       (syntax-case x ()
