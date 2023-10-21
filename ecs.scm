@@ -76,7 +76,8 @@
     (syntax-rules (and or not)
       ((_ world) (all world)) ;is this reachable??
       ((_ world (and e1 e2 ...)) (set-intersection (query-helper world e1) (query-helper world e2 ...)))
-      ((_ world (or e1 e2 ...)) (set-union (query-helper world e1) (query-helper world e2 ...)))
+      ((_ world (or e1 e2)) (set-union (query-helper world e1) (query-helper world e2)))
+      ((_ world (or e1 e2 e3 e4 ...)) (set-union (query-helper world e1) (query-helper world (or e2 e3 e4 ...))))
       ((_ world (not e1)) (set-difference (query-helper world) (get world e1)))
       ((_ world (not e1 e2 e3 ...)) (set-difference (query-helper world) (query-helper world (and e1 e2 e3 ...))))
       ((_ world type) (get world type))
