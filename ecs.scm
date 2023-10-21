@@ -114,10 +114,12 @@
        (apply values (cons ids (map (lambda(comp) (map (lambda (id) (hashtable-ref (vector-ref (entity-vector world) id) comp #f)) ids)) components)))))
 
   ;;works for single argument, to set several values use let-components abstraction
+  ;;CAVE: this assumens the component already exists.
   (define (set-component world query component value)
     (let ((ids (if (procedure? query) (set->list (query world)) (list query)))
 	  (v (vector-copy (entity-vector world))))
       (for-each (lambda (i) (let ((ht (hashtable-copy (vector-ref v i) #t)))
+			      (unless (hashtable-contains? ht component) (assertion-violation 'set-component "entity does not already have the component that should be set" (list i component)))
 			      (hashtable-set! ht component value)
 			      (vector-set! v i ht))) ids)
       (make-world (component-map world) v (free-ids world) (all world))))
