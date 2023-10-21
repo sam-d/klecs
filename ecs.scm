@@ -32,7 +32,7 @@
   (define-record-type (<component> component component?)
     (fields (immutable key component-key)
 	    (immutable value component-value))
-    (protocol (lambda (new) (case-lambda ((k) (if (symbol? k) (new k #f) (assertion-violation 'component "component key must be a symbol." k)))
+    (protocol (lambda (new) (case-lambda ((k) (if (symbol? k) (new k #t) (assertion-violation 'component "component key must be a symbol." k)))
 					 ((k v) (if (symbol? k) (new k v) (assertion-violation 'component "component key must be a symbol." k)))))))
   
   (define (create-world . list-of-entities)
