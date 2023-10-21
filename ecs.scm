@@ -10,6 +10,7 @@
 	  remove-entities
 	  query
 	  get-components
+	  add-components
 	  update-component
 	  set-component
 	  let-components)
@@ -94,10 +95,10 @@
       (make-world ht v (set-union (free-ids world) ids) (set-difference (all world) ids))))
   
   (define (add-components world query . list-of-components)
-    (let ((ids (if (procedure? query) (query world) query))
+    (let ((ids (if (procedure? query) (set->list (query world)) query))
 	  (ht (hashtable-copy (component-map world) #t))
 	  (v (vector-copy (entity-vector world))))
-      (when (null? (set->list ids)) (assertion-violation 'add-components "can only add components to existing entities but query returns an empty set"))
+      (when (null? ids) (assertion-violation 'add-components "can only add components to existing entities but query returns an empty set"))
       (for-each (lambda (i)
 		  (let ((e (hashtable-copy (vector-ref v i) #t)))
 		    (for-each (lambda (comp)
@@ -105,7 +106,7 @@
 				(hashtable-set! ht (component-key comp) (set-union (set i) (hashtable-ref ht (component-key comp) (set))))) ;and fill map components->entities
 			      list-of-components)
 		    (vector-set! v i e)))
-		(set->list ids))
+		ids)
       (make-world ht v (free-ids world) (all world))))
 
   ;return all the components values as values, but the first value returned is always the id of the entity from which the component is from
@@ -114,7 +115,7 @@
        (apply values (cons ids (map (lambda(comp) (map (lambda (id) (hashtable-ref (vector-ref (entity-vector world) id) comp #f)) ids)) components)))))
 
   ;;works for single argument, to set several values use let-components abstraction
-  ;;CAVE: this assumens the component already exists.
+  ;;CAVE: this assumes the component already exists.
   (define (set-component world query component value)
     (let ((ids (if (procedure? query) (set->list (query world)) (list query)))
 	  (v (vector-copy (entity-vector world))))
