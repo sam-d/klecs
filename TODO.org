@@ -13,6 +13,11 @@ https://t-machine.org/index.php/2009/10/26/entity-systems-are-the-future-of-mmos
 The database is then the world that gets passed around. The world is hereby serialized automatically. Provide a new version for each function in (klecs ecs) that read/write to the DB. Usercode should not need to change at all (test on your space-invader)
 * TODO Think on how to parallelize running systems
 Either run several systems in parallel or run 1 system over several entities in parallel
+* TODO do we need a remove-components procedure?
+* TODO inside the let-component macro have single version of set-components and remove entities available that work with just an id
+Then have the others work just with a query
+* TODO use the thread macro inside let-components body
+i.e. only allow a single expression inside the body. Then the user would use thread if she needs more
 * DONE get-components: when retrieving tags (i.e. components without values) return #t
 CLOSED: [2023-10-21 Sat 13:34]
 Currently a query against all entities cannot differentiate between those entities that have a tag or not as due to the missing value it will always return #f

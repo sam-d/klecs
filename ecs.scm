@@ -9,7 +9,9 @@
 	  add-entities
 	  remove-entities
 	  query
+	  empty-query?
 	  get-components
+	  get-single-component
 	  add-components
 	  update-component
 	  set-component
@@ -85,6 +87,9 @@
       ((_ world (not e1 e2 e3 ...)) (set-difference (query-helper world) (query-helper world (and e1 e2 e3 ...))))
       ((_ world type) (get world type))
       ((_ world e1 e2 e3 ...) (query-helper world (and e1 e2 e3 ...))))) ;default conjunction is and
+
+  (define (empty-query? world query)
+    (equal? (query world) (set)))
   ;query can be either a function as returned by the query syntactic form that will return a bitset when applied to a world or a bitset
   (define (remove-entities world query)
     (let ((ids (if (procedure? query) (query world) (set query)))
@@ -115,7 +120,12 @@
   (define (get-components world query . components)
     (let ((ids (if (procedure? query) (set->list (query world)) query)))
        (apply values (cons ids (map (lambda(comp) (map (lambda (id) (hashtable-ref (vector-ref (entity-vector world) id) comp #f)) ids)) components)))))
-
+  ;return the value stored in component 'component' for the single entity returned by query (or a single id)
+  (define (get-single-component world query component)
+    (unless (or (number? query) (= (length (set->list (query world))) 1)) (assertion-violation 'get-single-component "query must return a single entity"))
+    (let-values (((ids comp) (get-components world query component)))
+      (car comp)))
+  
   ;;works for single argument, to set several values use let-components abstraction
   ;;CAVE: this assumes the component already exists.
   (define (set-component world query component value)
