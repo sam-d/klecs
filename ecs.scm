@@ -13,7 +13,9 @@
 	  add-components
 	  update-component
 	  set-component
-	  let-components)
+	  let-components
+	  compose-worlds
+	  !)
   (import (rnrs base)
 	  (rnrs lists)
 	  (rnrs control)
@@ -149,7 +151,16 @@
 			  (fold-left (lambda (w id var ...)
 				       (let* ((world w)
 					      #,@(map (lambda (s) #`(world #,s)) #'(e1 e2 ...))) world)) initial-world ids var ...)))])))
-
-)
-
+  ;chain expressions by substituting the first argument with the result from the last expression, which must return a <world> type
+  (define-syntax compose-worlds
+    (syntax-rules ()
+      ((_ e) e)
+      ((_ e1 e2 e3 ...) (compose-worlds (replace-hole e1 e2) e3 ...))))
+  (define-syntax replace-hole
+      (syntax-rules (!)
+	((_ first-expression (p ! e2 ...)) (p first-expression e2 ...))))
+  (define-syntax !
+    (lambda (x)
+      (syntax-violation 'exclamation-point "misplaced auxiliary keyword" x)))
+);end of library
 
