@@ -1,0 +1,302 @@
+(import (klecs ecs)
+	(tui base)
+	(tui widgets)
+	(chezscheme))
+
+(define (line-breaks list-of-chars)
+  (let lp ((l list-of-chars)
+	   (i 0)
+	   (res '()))
+    (cond ((null? l) res)
+	  ((eq? #\newline (car l)) (lp (cdr l) 0 (append res (cursor-down) (cursor-back i))))
+	  (else (lp (cdr l) (+ i 1) (append res (list (car l))))))))
+
+(define (random-sequence length)
+  (if (= length 0) '() (cons (list-ref '(A C G T) (random 4)) (random-sequence (- length 1)))))
+
+(define (generate-attacker world)
+  (let-values (((_ lvl) (get-components world (query 'level) 'level)))
+    (list (component 'direction 'right)
+	  (component 'enemy)
+	  (component 'sprite "") ;start with empty sprite so it can be updated via set-component
+	  (component 'sequence (random-sequence (+ (* (car lvl) 2) 1))))))
+
+(define (current-milliseconds)
+  (ceiling (let ((t (current-time 'time-monotonic))) (/ (+ (* (time-second t) 1000000000) (time-nanosecond t)) 1000000))))
+
+(define *top-of-playing-field* 4)
+(define *left-of-playing-field* 4)
+(define *width* 80)
+(define *height* 20)
+(define *max-sequence-length* 10)
+(define *reward-base* 1)
+(define *damage-base* 1)
+(define wave-pos (cons (/ *height* 2) (+ *left-of-playing-field* 3)))
+(define next-wave-sprite (line-breaks (string->list
+"▄▄    ▄ ▄▄▄▄▄▄▄ ▄▄   ▄▄ ▄▄▄▄▄▄▄    ▄     ▄ ▄▄▄▄▄▄ ▄▄   ▄▄ ▄▄▄▄▄▄▄ 
+█  █  █ █       █  █▄█  █       █  █ █ ▄ █ █      █  █ █  █       █
+█   █▄█ █    ▄▄▄█       █▄     ▄█  █ ██ ██ █  ▄   █  █▄█  █    ▄▄▄█
+█       █   █▄▄▄█       █ █   █    █       █ █▄█  █       █   █▄▄▄ 
+█  ▄    █    ▄▄▄██     █  █   █    █       █      █       █    ▄▄▄█
+█ █ █   █   █▄▄▄█   ▄   █ █   █    █   ▄   █  ▄   ██     ██   █▄▄▄ 
+█▄█  █▄▄█▄▄▄▄▄▄▄█▄▄█ █▄▄█ █▄▄▄█    █▄▄█ █▄▄█▄█ █▄▄█ █▄▄▄█ █▄▄▄▄▄▄▄█")))
+(define input-pos (cons (+ *height* 5) (- (/ *width* 2) (/ *max-sequence-length* 2) -1)))
+(define base1 (cons (+ *top-of-playing-field* 5) 20))
+(define base2 (cons (+ *top-of-playing-field* 15) 35))
+(define base3 (cons (+ *top-of-playing-field* 5) 50))
+(define base4 (cons (+ *top-of-playing-field* 15) 65))
+;;define graphics
+(define playing-field (append (at (+ *height* 4) (- (/ *width* 2) (/ *max-sequence-length* 2)) (heavy-box (+ *max-sequence-length* 2) 3))
+			      (at (- (car base1) 1) (cdr base1) (style italic (color (fg blue) "base1")))
+			      (at (- (car base2) 1) (cdr base2) (style italic (color (fg blue) "base 2")))
+			      (at (- (car base3) 1) (cdr base3) (style italic (color (fg blue) "base 3")))
+			      (at (- (car base4) 1) (cdr base4) (style italic (color (fg blue) "base 4")))
+			      ;; (at 2 *left-of-playing-field* (style bold "Cash:"))
+			      (at 2 30 (style bold "Health:"))
+			      (at 2 60 (style bold "Wave:"))
+			      (at *top-of-playing-field* *left-of-playing-field* (light-rounded-box *width* *height*))))
+;;define entities
+(define level (list (component 'level 0) (component 'sprite '(#\0)) (component 'position (cons 2 67))))
+(define cursor (list (component 'cursor)
+		     (component 'position input-pos);(cons (+ *height* 5) (- (/ *width* 2) (/ *max-sequence-length* 2) 5)))
+		     (component 'sprite (style slow-blink '(#\|)))))
+(define cash (list (component 'cash 100)
+		   ;; (component 'position (cons 2 10))
+		   (component 'sprite (string->list "100"))))
+(define health (list (component 'health 10)
+		   (component 'position (cons 2 38))
+		   (component 'sprite (string->list "10"))))
+(define base1-entity (list (component 'base1)
+			   (component 'position base1)
+			   (component 'sprite "")
+			   (component 'sequence '(A))))
+(define base2-entity (list (component 'base2)
+			   (component 'sprite "")
+			   (component 'position base2)
+			   (component 'sequence '(T))))
+(define base3-entity (list (component 'base3)
+			   (component 'position base3)
+			   (component 'sprite "")
+			   (component 'sequence '(C))))
+(define base4-entity (list (component 'base4)
+			   (component 'position base4)
+			   (component 'sprite "")
+			   (component 'sequence '(G))))
+(define spawn1 (list (component 'spawn (list (current-milliseconds) 5000 10))
+		     (component 'position (cons (+ *top-of-playing-field* (floor (/ *height* 2)) 2) (+ *left-of-playing-field* 1)))))
+(define spawn2 (list (component 'spawn (list (current-milliseconds) 4000 10))
+		     (component 'position (cons (+ *top-of-playing-field* (floor (/ *height* 2)) -2) (+ *left-of-playing-field* 1)))))
+(define spawn3 (list (component 'spawn (list (current-milliseconds) 3000 10))
+		     (component 'position (cons (+ *top-of-playing-field* (floor (/ *height* 2))) (+ *left-of-playing-field* 1)))))
+(define world (create-world level cursor cash health spawn1 spawn2 spawn3 base1-entity base2-entity base3-entity base4-entity))
+;;systems
+(define (spawn-enemies world)
+  (let-components world (query 'spawn 'position) ((p 'position)(s 'spawn))
+		  (if (and (> (- (current-milliseconds) (car s)) (cadr s)) (> (caddr s) 0))
+		      (compose-worlds (add-entities world (cons (component 'position p) (generate-attacker world)))
+				      (set-component ! id 'spawn (list (current-milliseconds) (cadr s) (- (caddr s) 1))))
+		      world)))
+(define (render% world)
+  (clear-screen%)
+  (draw% playing-field)
+  (let-values (((_ pos sprite) (get-components world (query 'position 'sprite) 'position 'sprite)))
+    (for-each (lambda(p s) (draw% (at (car p) (cdr p) s))) pos sprite)))
+
+(define (update-base-sprites world)
+  (let-components world (query (or 'base1 'base2 'base3 'base4)) ((s 'sequence))
+		  (set-component world id 'sprite (apply append (map (lambda (sym)
+							 (cond ((eq? sym 'A) (color (bg magenta) '(#\A)))
+							       ((eq? sym 'C) (color (bg cyan) '(#\C)))
+							       ((eq? sym 'G) (color (bg yellow) '(#\G)))
+							       ((eq? sym 'T) (color (bg red) '(#\T))))) s)))))
+(define (update-enemy-sprites world)
+  (let-components world (query 'enemy) ((p 'position)(s 'sequence))
+		  (set-component world id 'sprite
+				 (let lp ((i (min (length s) (- (cdr p) *left-of-playing-field*)))
+					  (seq s)
+					  (res '()))
+				   (cond ((<= i 0) res)
+					 ((eq? (car seq) 'A) (lp (- i 1) (cdr seq) (append res (color (fg red) '(#\A)) (cursor-back 2))))
+					 ((eq? (car seq) 'C) (lp (- i 1) (cdr seq) (append res (color (fg yellow) '(#\C)) (cursor-back 2))))
+					 ((eq? (car seq) 'G) (lp (- i 1) (cdr seq) (append res (color (fg cyan) '(#\G)) (cursor-back 2))))
+					 ((eq? (car seq) 'T) (lp (- i 1) (cdr seq) (append res (color (fg magenta) '(#\T)) (cursor-back 2)))))))))
+(define (move direction by)
+  (lambda (pair)
+    (case direction
+      ((east) (cons (car pair) (+ (cdr pair) by)))
+      ((west) (cons (car pair) (- (cdr pair) by)))
+      ((north) (cons (- (car pair) by) (cdr pair)))
+      ((south) (cons (+ (car pair) by) (cdr pair))))))
+
+(define (directed-move world)
+  (let-components world (query 'position 'direction) ((pos 'position) (dir 'direction))
+		  (update-component world id 'position (case dir
+						     ((right east) (move 'east 1))
+						     ((left west) (move 'west 1))
+						     ((up north) (move 'north 1))
+						     ((down south) (move 'south 1))) #f)))
+(define (hybridise? x y)
+  (or (and (eq? x 'A) (eq? y 'T))
+      (and (eq? x 'C) (eq? y 'G))
+      (and (eq? x 'T) (eq? y 'A))
+      (and (eq? x 'G) (eq? y 'C))))
+(define (defend world)
+  (let-components world (query 'enemy) ((p 'position) (s 'sequence))
+		  (let-values (((_ bpos bseq) (get-components world (query (or 'base1 'base2 'base3 'base4)) 'position 'sequence)))
+		    (fold-left (lambda (w pos seq)
+				  (cond ((null? s) (remove-entities world id)) ;killed last nucleotide so remove entity
+					((and (<= (cdr pos) (cdr p) (+ (cdr pos) (length seq) -1)) (hybridise? (car s) (list-ref seq (- (cdr p) (cdr pos))))) (compose-worlds (set-component w id 'sequence (cdr s))
+																					      (set-component ! id 'position (cons (car p) (- (cdr p) 1)))
+																					      (add-entities ! (list (component 'position (if (> (car pos) (car p)) p pos)) (component 'sprite (vertical (abs (- (car p) (car pos))) #\x250B)) (component 'flash (cons (current-milliseconds) 200))))
+																					      (update-component ! (query 'cash) 'cash (lambda (c) (+ c *reward-base*)) 100)))
+					(else w)))
+			       world bpos bseq))))
+
+(define (update-level-sprite world)
+  (let-components world (query 'level) ((v 'level))
+		  (set-component world id 'sprite (string->list (number->string v)))))
+(define (update-health-sprite world)
+  (let-components world (query 'health) ((v 'health))
+		  (set-component world id 'sprite (string->list (number->string v)))))
+(define (color-input sym)
+  (cond ((eq? sym 'A) (color (bg  magenta) '(#\A)))
+	((eq? sym 'T) (color (bg red) '(#\T)))
+	((eq? sym 'G) (color (bg yellow) '(#\G)))
+	((eq? sym 'C) (color (bg cyan) '(#\C)))))
+(define (update-input-sprite world)
+  (let-components world (query 'input) ((p 'position)(i 'input)(s 'sprite))
+		  (if s (set-component world id 'sprite (apply append (map color-input (reverse i)))) (add-components world (list id) (component 'sprite (apply append (map color-input i)))))))
+(define (handle-homeruns world)
+  (let-components world (query 'enemy) ((p 'position) (s 'sequence))
+		  (if (>= (cdr p) *width*) (compose-worlds (remove-entities world id)
+							   (add-entities ! (list (component 'position p) (component 'sprite (style rapid-blink (color (fg red) '(#\x00A4)))) (component 'flash (cons (current-milliseconds) 500))))
+							   (update-component ! (query 'health) 'health (lambda (h) (- h (* (length s) *damage-base*))) 100)) world)))
+
+;remove entities after a set time has passed since it creation
+(define (flash world)
+  (let-components world (query 'flash) ((f 'flash))
+		  (if (> (- (current-milliseconds) (car f)) (cdr f)) (remove-entities world id) world)))
+(define (check-game-over world)
+  (if (<= (get-single-component world (query 'health) 'health) 0) (exit-loop (get-single-component world (query 'level) 'level)) world))
+
+;once spawns are empty, upgrade level and re-seed spawn points
+(define (reload-spawns world)
+  (let-values (((ids spawns) (get-components world (query 'spawn) 'spawn)))
+    ;when all enemies have spawned and none are visible anymore
+    (if (and (empty-query? world (query 'enemy)) (fold-left (lambda (acc x) (and (<= (caddr x) 0) acc)) #t spawns))
+	(compose-worlds world
+			(update-component ! (query 'level) 'level (lambda (x) (+ x 1)) #f)
+			(remove-entities ! (query 'spawn)); not really required.
+			(add-entities ! (list (component 'spawn (list (current-milliseconds) 5000 10))
+					      (component 'position (cons (+ *top-of-playing-field* (floor (/ *height* 2)) 2) (+ *left-of-playing-field* 1))))
+				      (list (component 'spawn (list (current-milliseconds) 4000 10))
+					    (component 'position (cons (+ *top-of-playing-field* (floor (/ *height* 2)) -2) (+ *left-of-playing-field* 1))))
+				      (list (component 'spawn (list (current-milliseconds) 3000 10))
+					    (component 'position (cons (+ *top-of-playing-field* (floor (/ *height* 2))) (+ *left-of-playing-field* 1)))))
+			(add-entities ! (list (component 'flash (cons (current-milliseconds) 2300)) (component 'position wave-pos) (component 'sprite next-wave-sprite))))
+	world)))
+
+(define (handle-input world)
+  (if (char-ready? (current-input-port))
+	(let ((char (read-char (current-output-port))))
+		 (case char
+		   ((#\a #\A) (compose-worlds (if (empty-query? world (query 'input))
+					  (add-entities world (list (component 'input '(A)) (component 'position input-pos)))
+					  (update-component world (query 'input) 'input (lambda (seq) (if (>= (length seq) *max-sequence-length*) seq (cons 'A seq))) '()))
+				      (update-component ! (query 'cursor) 'position (lambda (pos) (cons (car pos) (+ (cdr pos) 1))) #f)))
+		   ((#\t #\T) (compose-worlds (if (empty-query? world (query 'input))
+					  (add-entities world (list (component 'input '(T)) (component 'position input-pos)))
+					  (update-component world (query 'input) 'input (lambda (seq) (if (>= (length seq) *max-sequence-length*) seq (cons 'T seq))) '()))
+				      (update-component ! (query 'cursor) 'position (lambda (pos) (cons (car pos) (+ (cdr pos) 1))) #f)))
+		   ((#\c #\C) (compose-worlds (if (empty-query? world (query 'input))
+					  (add-entities world (list (component 'input '(C)) (component 'position input-pos)))
+					  (update-component world (query 'input) 'input (lambda (seq) (if (>= (length seq) *max-sequence-length*) seq (cons 'C seq))) '()))
+				      (update-component ! (query 'cursor) 'position (lambda (pos) (cons (car pos) (+ (cdr pos) 1))) #f)))
+		   ((#\g #\G) (compose-worlds (if (empty-query? world (query 'input))
+					  (add-entities world (list (component 'input '(G)) (component 'position input-pos)))
+					  (update-component world (query 'input) 'input (lambda (seq) (if (>= (length seq) *max-sequence-length*) seq (cons 'G seq))) '()))
+				      (update-component ! (query 'cursor) 'position (lambda (pos) (cons (car pos) (+ (cdr pos) 1))) #f)))
+		   ((#\1) (compose-worlds (if (empty-query? world (query 'input)) world (set-component world (query 'base1) 'sequence (reverse (get-single-component world (query 'input) 'input))))
+				  (remove-entities ! (query 'input))
+				  (set-component ! (query 'cursor) 'position input-pos)))
+		   ((#\2) (compose-worlds (if (empty-query? world (query 'input)) world (set-component world (query 'base2) 'sequence (reverse (get-single-component world (query 'input) 'input))))
+				  (remove-entities ! (query 'input))
+				  (set-component ! (query 'cursor) 'position input-pos)))
+		   ((#\3) (compose-worlds (if (empty-query? world (query 'input)) world (set-component world (query 'base3) 'sequence (reverse (get-single-component world (query 'input) 'input))))
+				  (remove-entities ! (query 'input))
+				  (set-component ! (query 'cursor) 'position input-pos)))
+		   ((#\4) (compose-worlds (if (empty-query? world (query 'input)) world (set-component world (query 'base4) 'sequence (reverse (get-single-component world (query 'input) 'input))))
+				  (remove-entities ! (query 'input))
+				  (set-component ! (query 'cursor) 'position input-pos)))
+		   ((#\backspace #\x) (if (empty-query? world (query 'input)) world
+				      (compose-worlds (update-component world (query 'input) 'input (lambda (s) (cdr s)) #f)
+					      (update-component ! (query 'cursor) 'position (lambda (p) (cons (car p) (- (cdr p) 1))) #f))))
+		   ((#\space) (if (empty-query? world (query 'input)) world (compose-worlds (set-component world (query 'input) 'input '())
+										    (set-component ! (query 'cursor) 'position input-pos)))) ;clear input field
+		   ((#\q) (exit-loop 'quit))
+		   (else world)))
+	world))
+;apply all systems in order specified by list systems to the world
+(define (get-update-function . systems)
+  (lambda (world)
+    (let update ((w world)
+		 (s systems))
+      (if (null? s) w (update ((car s) w) (cdr s))))))
+;;game loop
+(define update (get-update-function update-base-sprites spawn-enemies
+				    update-enemy-sprites defend update-level-sprite handle-input update-input-sprite
+				    reload-spawns
+				    handle-homeruns update-health-sprite flash check-game-over))
+;separate movement from the game state update and drawing. Move every second, update gamestate/input-handling and draw at 60fps
+(define exit-loop #f)
+(define-syntax event-loop
+    (syntax-rules ()
+      ((_ world update-state draw move cont-variable)
+	   (call/cc (lambda (kont)
+		      (set! cont-variable kont) ;set continuation to global variable to be called from anywhere and to stop to event loop: This is done in the absence of parameters in R6RS
+		      (let loop ((state world)
+			         (previous-time (current-milliseconds)))
+			(let inner-loop ((now (current-milliseconds))
+					 (new-state (update-state state)))
+			  (sleep (make-time 'time-duration 33000000 0)) ;sleep 1/30 seconds
+			  (draw new-state)
+			  (if (> (- now previous-time) 500) (loop (move new-state) (current-milliseconds))
+			      (inner-loop (current-milliseconds) (update-state new-state))))))))))
+
+
+;; (render% (update world))
+(define defend-logo (string->list
+" ______   _______  _______  _______  __    _  ______   __  
+|      | |       ||       ||       ||  |  | ||      | |  | 
+|  _    ||    ___||    ___||    ___||   |_| ||  _    ||  | 
+| | |   ||   |___ |   |___ |   |___ |       || | |   ||  | 
+| |_|   ||    ___||    ___||    ___||  _    || |_|   ||__| 
+|       ||   |___ |   |    |   |___ | | |   ||       | __  
+|______| |_______||___|    |_______||_|  |__||______| |__|"))
+(define (draw-info-text)
+  (draw% (at 1 1 (line-breaks (string->list "Defend! is a tower defense game inspired by biology. You need to defend your
+cell's DNA from the attack of viral DNA fragment. To do so, you hybridise the
+attacker with the complementary nucleotide. So you need to match\n"))))
+  (draw% (color (fg red) "A")) (draw% (string->list " with ")) (draw% (color (bg red) '(#\T))) 
+  (draw% (append (cursor-back 8)(color (fg magenta) "\nT"))) (draw% (string->list " with ")) (draw% (color (bg magenta) '(#\A))) 
+  (draw% (append (cursor-back 8)(color (fg yellow) "\nC"))) (draw% (string->list " with ")) (draw% (color (bg yellow) '(#\G))) 
+  (draw% (append (cursor-back 8)(color (fg cyan) "\nG"))) (draw% (string->list " with ")) (draw% (color (bg cyan) '(#\C))) 
+  (draw% (append (cursor-back 8)(line-breaks (string->list "\nBut do not worry, it is as simple as matching up the colors.\n\nYou can choose which sequence is at each base by typing a sequence into the input
+field. Once you are happy with it, press any of '1-4' to assign the sequence to the 
+respective base. Pressing 'x' will delete the last character and pressing 'space' 
+will clear the whole sequence in the input field.\n 
+Finally you can press 'q' anytime to exit the game.\n")))) )
+;;needs following stty settings: stty cbreak -echo
+(enable-alternative-buffer%)
+(clear-screen%)
+(draw% (at 1 4 (line-breaks defend-logo)))
+(draw% (at 10 5 (string->list "Press i for instructions, any other key to start the game")))
+(when (eq? #\i (read-char (current-input-port)))
+    (begin (clear-screen%)
+	   (draw-info-text)
+	   (display "Press any key to start game...")(read-char (current-input-port))))
+(let ((outcome (event-loop world update render% directed-move exit-loop)))
+  (if (eq? 'quit outcome) #f (begin (clear-screen%)
+				   (draw% (at 10 5 (append (string->list "You made it until Wave ") (string->list (number->string outcome))))))))
+(newline)(display "Press any key to quit...")(read-char (current-input-port))
+(disable-alternative-buffer%)
