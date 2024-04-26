@@ -171,7 +171,7 @@
       (syntax-rules (!)
 	((_ first-expression (p ! e2 ...)) (p first-expression e2 ...))))
   (define-syntax !
-    (lambda (x)
-      (syntax-violation 'exclamation-point "misplaced auxiliary keyword" x)))
+    (lambda (x)
+      (syntax-violation 'exclamation-point "misplaced auxiliary keyword" x)))
 );end of library
 
