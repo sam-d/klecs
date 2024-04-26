@@ -138,16 +138,17 @@
       (make-world (component-map world) v (free-ids world) (all world))))
   ;update the value of component 'component' for all entities matching query 'query' by calling the procedure with the previous value or default if the entity has no component 'component'
   ;query is either a procedure create by the query syntactic form or an integer
-  (define (update-component world query component procedure default)
-    (unless (symbol? component) (assertion-violation 'update-component "component needs to be a single symbol" component))
-    (let ((ids (if (procedure? query) (set->list (query world)) (list query)))
-	  (v (vector-copy (entity-vector world))))
-      (for-each (lambda(id)
-		  (let ((ht (hashtable-copy (vector-ref v id) #t)))
-		    (hashtable-update! ht component procedure default)
-		    (vector-set! v id ht))) ids)
-      (make-world (component-map world) v (free-ids world) (all world))))
-
+  (define update-component
+    (case-lambda ((world query component procedure) (update-component world query component procedure #f))
+		 ((world query component procedure default)
+		  (unless (symbol? component) (assertion-violation 'update-component "component needs to be a single symbol" component))
+		  (let ((ids (if (procedure? query) (set->list (query world)) (list query)))
+			(v (vector-copy (entity-vector world))))
+		    (for-each (lambda(id)
+				(let ((ht (hashtable-copy (vector-ref v id) #t)))
+				  (hashtable-update! ht component procedure default)
+				  (vector-set! v id ht))) ids)
+		    (make-world (component-map world) v (free-ids world) (all world))))))
   ;this syntactic form allows to iterate over the components of all entities that match the query. The components get bound to the variables as specified. Additionally, within
   ;the scope of body the variable world is bound to the last-updated world and the variable id is the entity id that is currently iterated over
   ;it is mandatory, that all expressions e1 e2 ... within the body return a world? instance
