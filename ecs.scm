@@ -92,9 +92,7 @@
     (equal? (query world) (set)))
   ;query can be either a function as returned by the query syntactic form that will return a bitset when applied to a world or a bitset
   (define (remove-entities world query)
-    (let ((ids (cond ((procedure? query) (query world))
-		     ((number? query) (set query))
-		     (else query)))
+    (let ((ids (if (procedure? query) (query world) (set query)))
 	  (ht (hashtable-copy (component-map world) #t))
 	  (v (vector-copy (entity-vector world))))
       (for-each (lambda (i)
@@ -119,8 +117,9 @@
       (make-world ht v (free-ids world) (all world))))
 
   ;return all the components values as values, but the first value returned is always the id of the entity from which the component is from
+  ;query is either a the results of a the query syntactic form or a single integer
   (define (get-components world query . components)
-    (let ((ids (if (procedure? query) (set->list (query world)) query)))
+    (let ((ids (if (procedure? query) (set->list (query world)) (list query))))
        (apply values (cons ids (map (lambda(comp) (map (lambda (id) (hashtable-ref (vector-ref (entity-vector world) id) comp #f)) ids)) components)))))
   ;return the value stored in component 'component' for the single entity returned by query (or a single id)
   (define (get-single-component world query component)
