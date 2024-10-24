@@ -55,21 +55,22 @@
 	  (vector-set! v i e)))))
 
   (define (add-entities world . list-of-entities)
-    (let ((ht (hashtable-copy (component-map world) #t))
-	  (v (vector-copy (entity-vector world) 0 (max (- (+ (vector-length (entity-vector world)) (length list-of-entities)) (length (set->list (free-ids world)))) (vector-length (entity-vector world))))));grow vector by amount of new entities minus the number of free slots
-      (let lp ((i (vector-length (entity-vector world)))
-	       (free (set->list (free-ids world)))
-	       (entities list-of-entities)
-	       (ids '()))
-	(if (null? entities)
-	    (make-world ht v (apply set free) (set-union (all world) (apply set ids)))
-	    (let ((e (make-eq-hashtable (length (car entities)))))
-	      (for-each (lambda (comp)
-			  (hashtable-set! e (component-key comp) (component-value comp));fill entity hashtable with all components
-			  (hashtable-set! ht (component-key comp) (set-union (set (if (null? free) i (car free))) (hashtable-ref ht (component-key comp) (set))))) ;and fill map components->entities
-			(car entities))
-	      (vector-set! v (if (null? free) i (car free)) e)
-	      (lp (if (null? free) (+ i 1) i) (if (null? free) free (cdr free)) (cdr entities) (cons (if (null? free) i (car free)) ids)))))))
+    (if (null? list-of-entities) world
+	(let ((ht (hashtable-copy (component-map world) #t))
+	      (v (vector-copy (entity-vector world) 0 (max (- (+ (vector-length (entity-vector world)) (length list-of-entities)) (length (set->list (free-ids world)))) (vector-length (entity-vector world))))));grow vector by amount of new entities minus the number of free slots
+	  (let lp ((i (vector-length (entity-vector world)))
+		   (free (set->list (free-ids world)))
+		   (entities list-of-entities)
+		   (ids '()))
+	    (if (null? entities)
+		(make-world ht v (apply set free) (set-union (all world) (apply set ids)))
+		(let ((e (make-eq-hashtable (length (car entities)))))
+		  (for-each (lambda (comp)
+			      (hashtable-set! e (component-key comp) (component-value comp));fill entity hashtable with all components
+			      (hashtable-set! ht (component-key comp) (set-union (set (if (null? free) i (car free))) (hashtable-ref ht (component-key comp) (set))))) ;and fill map components->entities
+			    (car entities))
+		  (vector-set! v (if (null? free) i (car free)) e)
+		  (lp (if (null? free) (+ i 1) i) (if (null? free) free (cdr free)) (cdr entities) (cons (if (null? free) i (car free)) ids))))))))
 
   ;syntax query returns a function that when applied to a world returns the set of ids that match the query (as a bitset)
   (define (get world type) (hashtable-ref (component-map world) type (set)))
@@ -102,19 +103,20 @@
       (make-world ht v (set-union (free-ids world) ids) (set-difference (all world) ids))))
   
   (define (add-components world query . list-of-components)
-    (let ((ids (if (procedure? query) (set->list (query world)) query))
-	  (ht (hashtable-copy (component-map world) #t))
-	  (v (vector-copy (entity-vector world))))
-      (when (null? ids) (assertion-violation 'add-components "can only add components to existing entities but query returns an empty set"))
-      (for-each (lambda (i)
-		  (let ((e (hashtable-copy (vector-ref v i) #t)))
-		    (for-each (lambda (comp)
-				(hashtable-set! e (component-key comp) (component-value comp));fill entity hashtable with all components
-				(hashtable-set! ht (component-key comp) (set-union (set i) (hashtable-ref ht (component-key comp) (set))))) ;and fill map components->entities
-			      list-of-components)
-		    (vector-set! v i e)))
-		ids)
-      (make-world ht v (free-ids world) (all world))))
+    (if (null? list-of-components)  world
+	(let ((ids (if (procedure? query) (set->list (query world)) query))
+	      (ht (hashtable-copy (component-map world) #t))
+	      (v (vector-copy (entity-vector world))))
+	  (when (null? ids) (assertion-violation 'add-components "can only add components to existing entities but query returns an empty set"))
+	  (for-each (lambda (i)
+		      (let ((e (hashtable-copy (vector-ref v i) #t)))
+			(for-each (lambda (comp)
+				    (hashtable-set! e (component-key comp) (component-value comp));fill entity hashtable with all components
+				    (hashtable-set! ht (component-key comp) (set-union (set i) (hashtable-ref ht (component-key comp) (set))))) ;and fill map components->entities
+				  list-of-components)
+			(vector-set! v i e)))
+		    ids)
+	  (make-world ht v (free-ids world) (all world)))))
 
   ;return all the components values as values, but the first value returned is always the id of the entity from which the component is from
   ;query is either a the results of a the query syntactic form or a single integer
