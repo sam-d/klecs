@@ -126,7 +126,7 @@
   ;return the value stored in component 'component' for the single entity returned by query (or a single id)
   (define (get-single-component world query component)
     (unless (or (number? query) (= (length (set->list (query world))) 1)) (assertion-violation 'get-single-component "query must return a single entity"))
-    (let-values (((ids comp) (get-components world (if (number? query) (list query) query) component)))
+    (let-values (((ids comp) (get-components world query component)))
       (car comp)))
   
   ;;works for single argument, to set several values use let-components abstraction
